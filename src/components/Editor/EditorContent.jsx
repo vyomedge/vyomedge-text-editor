@@ -6,6 +6,194 @@ const DEFAULT_CONTENT = `
 <p>Start typing here...</p>`;
 const PAGE_HEIGHT = 1122;
 const PAGE_GAP = 28;
+const BLOCK_TAGS = new Set([
+  "P",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "BLOCKQUOTE",
+  "PRE",
+  "UL",
+  "OL",
+  "LI",
+  "TABLE",
+  "THEAD",
+  "TBODY",
+  "TFOOT",
+  "TR",
+  "TD",
+  "TH",
+  "HR",
+  "DIV",
+  "SECTION",
+  "ARTICLE",
+  "FIGURE",
+  "HEADER",
+  "FOOTER",
+]);
+
+function isBlockNode(node) {
+  return node?.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has(node.tagName);
+}
+
+function saveSelectionOffsets(container) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+
+  const range = selection.getRangeAt(0);
+  if (!container.contains(range.startContainer)) return null;
+
+  const startRange = range.cloneRange();
+  startRange.selectNodeContents(container);
+  startRange.setEnd(range.startContainer, range.startOffset);
+
+  const endRange = range.cloneRange();
+  endRange.selectNodeContents(container);
+  endRange.setEnd(range.endContainer, range.endOffset);
+
+  return {
+    start: startRange.toString().length,
+    end: endRange.toString().length,
+  };
+}
+
+function restoreSelectionOffsets(container, offsets) {
+  if (!offsets) return;
+
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let currentOffset = 0;
+  let startSet = false;
+  let node = walker.nextNode();
+
+  while (node) {
+    const nextOffset = currentOffset + node.textContent.length;
+
+    if (!startSet && offsets.start <= nextOffset) {
+      range.setStart(node, Math.max(0, offsets.start - currentOffset));
+      startSet = true;
+    }
+
+    if (offsets.end <= nextOffset) {
+      range.setEnd(node, Math.max(0, offsets.end - currentOffset));
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+
+    currentOffset = nextOffset;
+    node = walker.nextNode();
+  }
+
+  selection.removeAllRanges();
+  selection.selectAllChildren(container);
+  selection.collapseToEnd();
+}
+
+function normalizeEditorRoot(editor) {
+  if (!editor) return false;
+
+  const sourceNodes = Array.from(editor.childNodes);
+  if (!sourceNodes.length) return false;
+
+  const fragment = document.createDocumentFragment();
+  let paragraph = null;
+  let changed = false;
+
+  const flushParagraph = () => {
+    if (!paragraph) return;
+    if (!paragraph.childNodes.length) {
+      paragraph = null;
+      return;
+    }
+    fragment.appendChild(paragraph);
+    paragraph = null;
+  };
+
+  const ensureParagraph = () => {
+    if (!paragraph) {
+      paragraph = document.createElement("p");
+      changed = true;
+    }
+    return paragraph;
+  };
+
+  sourceNodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (!node.textContent.trim() && !paragraph) {
+        changed = true;
+        return;
+      }
+      ensureParagraph().appendChild(node.cloneNode(true));
+      changed = true;
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      changed = true;
+      return;
+    }
+
+    if (isBlockNode(node)) {
+      flushParagraph();
+      fragment.appendChild(node.cloneNode(true));
+      return;
+    }
+
+    if (node.tagName === "BR") {
+      ensureParagraph().appendChild(node.cloneNode(true));
+      changed = true;
+      return;
+    }
+
+    ensureParagraph().appendChild(node.cloneNode(true));
+    changed = true;
+  });
+
+  flushParagraph();
+
+  if (!changed) return false;
+
+  editor.replaceChildren(fragment);
+  return true;
+}
+
+function isEditorEmpty(editor) {
+  if (!editor) return true;
+  const html = editor.innerHTML
+    .replace(/<br\s*\/?>/gi, "")
+    .replace(/&nbsp;/gi, "")
+    .trim();
+  return html === "";
+}
+
+function placeCaretInside(node) {
+  if (!node) return;
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function ensureParagraphRoot(editor) {
+  if (!editor || !isEditorEmpty(editor)) return false;
+
+  const paragraph = document.createElement("p");
+  paragraph.appendChild(document.createElement("br"));
+  editor.replaceChildren(paragraph);
+  placeCaretInside(paragraph);
+  return true;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Resize-handle overlay
@@ -134,9 +322,11 @@ const EditorContent = forwardRef(
     useEffect(() => {
       if (!ref.current || initialized.current) return;
       initialized.current = true;
+      document.execCommand("defaultParagraphSeparator", false, "p");
       if (!ref.current.innerHTML.trim()) {
         ref.current.innerHTML = initialHtml || DEFAULT_CONTENT;
       }
+      normalizeEditorRoot(ref.current);
     }, [ref, initialHtml]);
 
     // Create the drop indicator once
@@ -560,8 +750,37 @@ const EditorContent = forwardRef(
       const el = ref.current;
 
       const handleInput = () => {
+        ensureParagraphRoot(el);
+        const selectionOffsets = saveSelectionOffsets(el);
+        const normalized = normalizeEditorRoot(el);
+        if (normalized) {
+          restoreSelectionOffsets(el, selectionOffsets);
+        }
         onContentChange(el.innerHTML);
         updateWordCount();
+      };
+
+      const handleKeyDown = (event) => {
+        const isTypingKey =
+          event.key.length === 1 ||
+          event.key === "Enter" ||
+          event.key === "Backspace" ||
+          event.key === "Delete";
+
+        if (!isTypingKey) return;
+
+        if (event.key === "Backspace" || event.key === "Delete") {
+          requestAnimationFrame(() => {
+            ensureParagraphRoot(el);
+            onContentChange(el.innerHTML);
+            updateWordCount();
+          });
+          return;
+        }
+
+        if (isEditorEmpty(el)) {
+          ensureParagraphRoot(el);
+        }
       };
 
       const handleMouseUp = () => {
@@ -581,10 +800,14 @@ const EditorContent = forwardRef(
       };
 
       el.addEventListener("input", handleInput);
+      el.addEventListener("keydown", handleKeyDown);
+      el.addEventListener("blur", handleInput);
       el.addEventListener("mouseup", handleMouseUp);
       el.addEventListener("keyup", updateWordCount);
       return () => {
         el.removeEventListener("input", handleInput);
+        el.removeEventListener("keydown", handleKeyDown);
+        el.removeEventListener("blur", handleInput);
         el.removeEventListener("mouseup", handleMouseUp);
         el.removeEventListener("keyup", updateWordCount);
       };
