@@ -13,6 +13,7 @@ import TableModal from "@/components/Modals/TableModal";
 import VideoModal from "@/components/Modals/VideoModal";
 import ButtonModal from "@/components/Modals/ButtonModal/ButtonModal";
 import { useEditor } from "@/hooks/useEditor";
+import { getPageCount } from "@/utils/metrics";
 import "@/styles/editor.css";
 
 const PAGE_HEIGHT = 1122;
@@ -23,10 +24,7 @@ function getMetrics(editorElement, html) {
     html,
     text,
     wordCount: text ? text.split(/\s+/).filter(Boolean).length : 0,
-    pageCount: Math.max(
-      1,
-      Math.ceil((editorElement?.scrollHeight || PAGE_HEIGHT) / PAGE_HEIGHT),
-    ),
+    pageCount: getPageCount(editorElement, PAGE_HEIGHT),
   };
 }
 

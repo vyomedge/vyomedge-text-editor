@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { getPageCount } from "@/utils/metrics";
 
 const APPROX_PAGE_HEIGHT = 1122;
 
@@ -15,10 +16,7 @@ export function useEditor() {
     if (!editorRef.current) return;
     const text = editorRef.current.innerText.trim();
     const count = text ? text.split(/\s+/).filter(Boolean).length : 0;
-    const nextPageCount = Math.max(
-      1,
-      Math.ceil(editorRef.current.scrollHeight / APPROX_PAGE_HEIGHT),
-    );
+    const nextPageCount = getPageCount(editorRef.current, APPROX_PAGE_HEIGHT);
     setWordCount(count);
     setPageCount(nextPageCount);
   }, []);
