@@ -93,6 +93,60 @@ export default function EditorShell({
     postEditorData(getContent());
   }, [postEditorData, getContent]);
 
+  useEffect(() => {
+    if (!embedMode || typeof window === "undefined") {
+      return;
+    }
+
+    function handleParentMessage(event) {
+      const message = event.data;
+      if (!message || typeof message !== "object") {
+        return;
+      }
+
+      if (message.type === "custom-text-editor:set-data") {
+        const payload = message.payload || {};
+        const nextHtml =
+          typeof payload.html === "string" ? payload.html : getContent();
+        const nextTitle =
+          typeof payload.title === "string" && payload.title.trim()
+            ? payload.title
+            : titleRef.current;
+
+        loadContent(nextHtml || "");
+        onContentChange(nextHtml || "");
+        updateWordCount();
+        setTitle(nextTitle || "Untitled Document");
+        postEditorData(nextHtml || "");
+        showStatus("Content updated");
+        return;
+      }
+
+      if (message.type === "custom-text-editor:set-html") {
+        const html =
+          typeof message.payload?.html === "string" ? message.payload.html : "";
+
+        loadContent(html);
+        onContentChange(html);
+        updateWordCount();
+        postEditorData(html);
+        showStatus("Content updated");
+      }
+    }
+
+    window.addEventListener("message", handleParentMessage);
+    return () => window.removeEventListener("message", handleParentMessage);
+  }, [
+    embedMode,
+    getContent,
+    loadContent,
+    onContentChange,
+    postEditorData,
+    setTitle,
+    showStatus,
+    updateWordCount,
+  ]);
+
   const handleNewDoc = useCallback(async () => {
     try {
       const res = await apiClientRef.current.createDocument({
@@ -209,9 +263,7 @@ export default function EditorShell({
     <div
       className={`editor-app ${isDark ? "dark" : ""} ${embedMode ? "embedded-editor" : ""}`}
     >
-      <Header
-        wordCount={wordCount}
-      />
+      <Header />
       <div className="editor-body">
         <div className="editor-main">
           <EditorToolbar onOpenModal={setActiveModal} editorRef={editorRef} />
@@ -230,6 +282,7 @@ export default function EditorShell({
           />
         </div>
       </div>
+      <div className="editor-powered-by">Powered by Vyomedge</div>
       {floatingToolbar.show && (
         <FloatingToolbar
           position={{ x: floatingToolbar.x, y: floatingToolbar.y }}

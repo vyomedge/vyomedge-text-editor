@@ -100,7 +100,7 @@ export default function RichTextEditor({
 
   return (
     <div className={`editor-app ${className}`.trim()}>
-      <Header wordCount={wordCount} />
+      <Header />
       <div className="editor-body">
         <div className="editor-main">
           {!readOnly && (
@@ -123,6 +123,7 @@ export default function RichTextEditor({
           />
         </div>
       </div>
+      <div className="editor-powered-by">Powered by Vyomedge</div>
       {!readOnly && floatingToolbar.show && (
         <FloatingToolbar
           position={{ x: floatingToolbar.x, y: floatingToolbar.y }}

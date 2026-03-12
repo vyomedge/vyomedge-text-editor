@@ -94,6 +94,28 @@ body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--
 }
 .editor-content:focus { box-shadow: 0 4px 20px rgba(0,0,0,.15); }
 
+.editor-powered-by {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 250;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 8px 24px rgba(16,24,40,.12);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  backdrop-filter: blur(6px);
+}
+
+body.dark .editor-powered-by,
+.editor-app.dark .editor-powered-by {
+  background: rgba(37,37,37,.9);
+}
+
 .editor-content h1 { font-size: 2em; margin: 16px 0 8px; }
 .editor-content h2 { font-size: 1.6em; margin: 14px 0 7px; }
 .editor-content h3 { font-size: 1.3em; margin: 12px 0 6px; }
@@ -176,4 +198,5 @@ body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--
   #find-bar { right: 8px; width: calc(100vw - 16px); }
   .doc-sidebar { width: 220px; }
   .doc-sidebar.closed { margin-left: -220px; }
+  .editor-powered-by { right: 12px; bottom: 12px; font-size: 11px; }
 }
